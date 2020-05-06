@@ -2,66 +2,55 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <math.h>
-struct Point(
+#define _cdecl __attribute__((__cdecl__))
+struct Point{
 	int x;
 	int y;
-}
-extern Point rotateRight(Point A,Point B);
-extern Point rotateLeft(Point A,Point B);
-extern Point bresenham(Point A,Point B);
+};
+//typedef struct Point Point;
+extern struct Point rotateRight(struct Point A, struct Point B);
+extern struct Point rotateLeft(struct Point A, struct Point B);
+//extern Point bresenham(Point A,Point B);
 
 typedef struct
 {
-	int width, height;
-	unsigned char* pImg;
-	int imgSize;
-	// proszê pamiêtaæ, ¿e to jest struktura, któr¹ Pañstwo zarz¹dzacie
-	// mo¿na tu dodaæ kolejne pola, które bêd¹ dla Was u¿yteczne
+	unsigned short bfType; 
+	unsigned long  bfSize; 
+	unsigned short bfReserved1; 
+	unsigned short bfReserved2; 
+	unsigned long  bfOffBits; 
+	unsigned long  biSize; 
+	long  biWidth; 
+	long  biHeight; 
+	short biPlanes; 
+	short biBitCount; 
+	unsigned long  biCompression; 
+	unsigned long  biSizeImage; 
+	long biXPelsPerMeter; 
+	long biYPelsPerMeter; 
+	unsigned long  biClrUsed; 
+	unsigned long  biClrImportant;
+	unsigned long  RGBQuad_0;
+	unsigned long  RGBQuad_1;
+} __attribute__((__packed__)) bmpHdr;
+
+typedef struct
+{
+	int width, height;		// szerokosc i wysokosc obrazu
+	unsigned char* pImg;	// wskazanie na poczatek danych pikselowych
+	int cX, cY;				// "aktualne wspólrzedne" 
+	int col;				// "aktualny kolor"
 } imgInfo;
 
-typedef struct
+void* freeResources(FILE* pFile, void* pFirst, void* pSnd)
 {
-	unsigned short bfType;
-	unsigned long  bfSize;
-	unsigned short bfReserved1;
-	unsigned short bfReserved2;
-	unsigned long  bfOffBits;
-	unsigned long  biSize;
-	long  biWidth;
-	long  biHeight;
-	short biPlanes;
-	short biBitCount;
-	unsigned long  biCompression;
-	unsigned long  biSizeImage;
-	long biXPelsPerMeter;
-	long biYPelsPerMeter;
-	unsigned long  biClrUsed;
-	unsigned long  biClrImportant;
-} _attribute__((__packed_)) bmpHdr;
-
-mgInfo* InitImage(int w, int h)
-{
-	imgInfo *pImg;
-	if ((pImg = (imgInfo *)malloc(sizeof(imgInfo))) == 0)
-		return 0;
-	pImg->height = h;
-	pImg->width = w;
-	pImg->pImg = (unsigned char*)malloc((((w * 3 + 3) >> 2) << 2) * h);
-	if (pImg->pImg == 0)
-	{
-		free(pImg);
-		return 0;
-	}
-	memset(pImg->pImg, 0, (((w * 3 + 3) >> 2) << 2) * h);
-	return pImg;
-}
-
-imgInfo * copyImage(const imgInfo* pImg)
-{
-	imgInfo *pNew = InitImage(pImg->width, pImg->height);
-	if (pNew != 0)
-		memcpy(pNew->pImg, pImg->pImg, pNew->imgSize);
-	return pNew;
+	if (pFile != 0)
+		fclose(pFile);
+	if (pFirst != 0)
+		free(pFirst);
+	if (pSnd !=0)
+		free(pSnd);
+	return 0;
 }
 
 imgInfo* readBMP(const char* fname)
@@ -70,6 +59,7 @@ imgInfo* readBMP(const char* fname)
 	FILE* fbmp = 0;
 	bmpHdr bmpHead;
 	int lineBytes, y;
+	unsigned long imageSize = 0;
 	unsigned char* ptr;
 
 	pInfo = 0;
@@ -77,36 +67,38 @@ imgInfo* readBMP(const char* fname)
 	if (fbmp == 0)
 		return 0;
 
-	fread((void *)&bmpHead, sizeof(bmpHead), 1, fbmp);
-	// parê sprawdzeñ
+	fread((void *) &bmpHead, sizeof(bmpHead), 1, fbmp);
+	// some basic checks
 	if (bmpHead.bfType != 0x4D42 || bmpHead.biPlanes != 1 ||
-		bmpHead.biBitCount != 24 ||
-		(pInfo = (imgInfo *)malloc(sizeof(imgInfo))) == 0)
-		return (imgInfo*)freeResources(fbmp, pInfo ? pInfo->pImg : 0, pInfo);
+		bmpHead.biBitCount != 1 ||
+		(pInfo = (imgInfo *) malloc(sizeof(imgInfo))) == 0)
+		return (imgInfo*) freeResources(fbmp, pInfo->pImg, pInfo);
 
 	pInfo->width = bmpHead.biWidth;
 	pInfo->height = bmpHead.biHeight;
-	if ((pInfo->pImg = (unsigned char*)malloc(bmpHead.biSizeImage)) == 0)
-		return (imgInfo*)freeResources(fbmp, pInfo->pImg, pInfo);
+	imageSize = (((pInfo->width + 31) >> 5) << 2) * pInfo->height;
 
-	// porz¹dki z wysokoœci¹ (mo¿e byæ ujemna)
+	if ((pInfo->pImg = (unsigned char*) malloc(imageSize)) == 0)
+		return (imgInfo*) freeResources(fbmp, pInfo->pImg, pInfo);
+
+	// process height (it can be negative)
 	ptr = pInfo->pImg;
-	lineBytes = ((pInfo->width * 3 + 3) >> 2) << 2; // rozmiar linii w bajtach
+	lineBytes = ((pInfo->width + 31) >> 5) << 2; // line size in bytes
 	if (pInfo->height > 0)
 	{
-		// "do góry nogami", na pocz¹tku dó³ obrazu
+		// "upside down", bottom of the image first
 		ptr += lineBytes * (pInfo->height - 1);
 		lineBytes = -lineBytes;
 	}
 	else
 		pInfo->height = -pInfo->height;
 
-	// sekwencja odczytu obrazu 
-	// przesuniêcie na stosown¹ pozycjê w pliku
+	// reading image
+	// moving to the proper position in the file
 	if (fseek(fbmp, bmpHead.bfOffBits, SEEK_SET) != 0)
-		return (imgInfo*)freeResources(fbmp, pInfo->pImg, pInfo);
+		return (imgInfo*) freeResources(fbmp, pInfo->pImg, pInfo);
 
-	for (y = 0; y < pInfo->height; ++y)
+	for (y=0; y<pInfo->height; ++y)
 	{
 		fread(ptr, 1, abs(lineBytes), fbmp);
 		ptr += lineBytes;
@@ -117,8 +109,8 @@ imgInfo* readBMP(const char* fname)
 
 int saveBMP(const imgInfo* pInfo, const char* fname)
 {
-	int lineBytes = ((pInfo->width * 3 + 3) >> 2) << 2;
-	bmpHdr bmpHead =
+	int lineBytes = ((pInfo->width + 31) >> 5)<<2;
+	bmpHdr bmpHead = 
 	{
 	0x4D42,				// unsigned short bfType; 
 	sizeof(bmpHdr),		// unsigned long  bfSize; 
@@ -128,13 +120,15 @@ int saveBMP(const imgInfo* pInfo, const char* fname)
 	pInfo->width,		// long  biWidth; 
 	pInfo->height,		// long  biHeight; 
 	1,					// short biPlanes; 
-	24,					// short biBitCount; 
+	1,					// short biBitCount; 
 	0,					// unsigned long  biCompression; 
 	lineBytes * pInfo->height,	// unsigned long  biSizeImage; 
 	11811,				// long biXPelsPerMeter; = 300 dpi
 	11811,				// long biYPelsPerMeter; 
 	2,					// unsigned long  biClrUsed; 
 	0,					// unsigned long  biClrImportant;
+	0x00000000,			// unsigned long  RGBQuad_0;
+	0x00FFFFFF			// unsigned long  RGBQuad_1;
 	};
 
 	FILE * fbmp;
@@ -150,7 +144,7 @@ int saveBMP(const imgInfo* pInfo, const char* fname)
 	}
 
 	ptr = pInfo->pImg + lineBytes * (pInfo->height - 1);
-	for (y = pInfo->height; y > 0; --y, ptr -= lineBytes)
+	for (y=pInfo->height; y > 0; --y, ptr -= lineBytes)
 		if (fwrite(ptr, sizeof(unsigned char), lineBytes, fbmp) != lineBytes)
 		{
 			fclose(fbmp);
@@ -160,73 +154,237 @@ int saveBMP(const imgInfo* pInfo, const char* fname)
 	return 0;
 }
 
-void putPixel(imgInfo *pInfo, int x, int y, int *rgb)
+/****************************************************************************************/
+imgInfo* InitScreen (int w, int h)
 {
-	int lineBytes = ((pInfo->width * 3 + 3) >> 2) << 2;
-	unsigned char *pAddr = pInfo->pImg + y * lineBytes + x * 3;
-	*pAddr = rgb[0] >> 16;
-	*(pAddr + 1) = rgb[1] >> 16;
-	*(pAddr + 2) = rgb[2] >> 16;
+	imgInfo *pImg;
+	if ( (pImg = (imgInfo *) malloc(sizeof(imgInfo))) == 0)
+		return 0;
+	pImg->height = h;
+	pImg->width = w;
+	pImg->pImg = (unsigned char*) malloc((((w + 31) >> 5) << 2) * h);
+	if (pImg->pImg == 0)
+	{
+		free(pImg);
+		return 0;
+	}
+	memset(pImg->pImg, 0xFF, (((w + 31) >> 5) << 2) * h);
+	pImg->cX = 0;
+	pImg->cY = 0;
+	pImg->col = 0;
+	return pImg;
 }
 
-void FreeImage(imgInfo* pInfo)
+void FreeScreen(imgInfo* pInfo)
 {
 	if (pInfo && pInfo->pImg)
 		free(pInfo->pImg);
 	if (pInfo)
 		free(pInfo);
 }
+imgInfo* SetColor(imgInfo* pImg, int col)
+{
+	pImg->col = col != 0;
+	return pImg;
+}
 
-void MoveForward(Point& A,Point& B)
+imgInfo* MoveTo(imgInfo* pImg, int x, int y)
+{
+	if (x >= 0 && x < pImg->width)
+		pImg->cX = x;
+	if (y >= 0 && y < pImg->height)
+		pImg->cY = y;
+	return pImg;
+}
+void SetPixel(imgInfo* pImg, int x, int y)
+{
+	unsigned char *pPix = pImg->pImg + (((pImg->width + 31) >> 5) << 2) * y + (x >> 3);
+	unsigned char mask = 0x80 >> (x & 0x07);
+	if (pImg->col)
+		*pPix |= mask;
+	else
+		*pPix &= ~mask;
+}
+imgInfo* LineTo(imgInfo* pImg, int x, int y)
+{
+	// draws line segment between current position and (x,y)
+	int cx = pImg->cX, cy = pImg->cY;
+	int dx = x - cx, xi = 1, dy = y - cy, yi = 1;
+	int d, ai, bi;
+
+	if (dx < 0)
+	{ 
+		xi = -1;
+		dx = -dx;
+	} 
+
+	if (dy < 0)
+	{ 
+		yi = -1;
+		dy = -dy;
+	} 
+
+	// first pixel
+	SetPixel(pImg, cx, cy);
+
+	// horizontal drawing 
+	if (dx > dy)
+	{
+		ai = (dy - dx) * 2;
+		bi = dy * 2;
+		d = bi - dx;
+		// for each x
+		while (cx != x)
+		{ 
+			// check line move indicator
+			if (d >= 0)
+			{ 
+				cx += xi;
+				cy += yi;
+				d += ai;
+			} 
+			else
+			{
+				d += bi;
+				cx += xi;
+			}
+			SetPixel(pImg, cx, cy);
+		}
+	} 
+	// vertical drawing
+	else
+	{ 
+		ai = ( dx - dy ) * 2;
+		bi = dx * 2;
+		d = bi - dy;
+		// for each y
+		while (cy != y)
+		{ 
+			// check column move indicator
+			if (d >= 0)
+			{ 
+				cx += xi;
+				cy += yi;
+				d += ai;
+			}
+			else
+			{
+				d += bi;
+				cy += yi;
+			}
+			SetPixel(pImg, cx, cy);
+		}
+	}
+	pImg->cX = x;
+	pImg->cY = y;
+	return pImg;
+}
+
+struct Point last_Point;
+struct Point start,end;
+
+void MoveForward(imgInfo* pInfo,struct Point A,struct Point B)
 {
 	
+	// move vector (x2,y2) by (x1,y1)
+	B.x = B.x + last_Point.x - A.x;
+	B.y = B.y + last_Point.y - A.y;
+	
+	A.x+=60;
+	A.y+=80;
+	B.x+=60;
+	B.y+=80;
+	
+	printf("Start point X: %d , Y: %d \n",A.x,A.y);
+	printf("End point X: %d , Y: %d \n",B.x,B.y);
+	
+	MoveTo(pInfo,A.x,A.y);
+	LineTo(pInfo,B.x,B.y);
+	
+	start = last_Point;
+	
+	last_Point.x = B.x - 60;
+	last_Point.y = B.y - 80;
+}
+
+char* generate_instruction(size_t generation)
+{
+	char* axiom = "+F--F--F";
+	char* instruction = axiom;
+	size_t i = 0;
+	for(i=0;i<generation;++i)
+	{
+		char* new_instruction = "";
+		size_t size = strlen(instruction);
+		size_t j = 0;
+		for(j=0;j<size;++j)
+		{
+			if(instruction[j]=='F')
+			{
+				new_instruction += "F+F--F+F;
+			}
+			else{
+				new_instruction += instruction[j];
+			}
+		}
+		instruction = new_instruction;
+	}
+	
+	return instruction;
 }
 
 int main(void)
 {
 	imgInfo* pInfo;
+	
+	last_Point.x=0;
+	last_Point.y=0;
 
-
-	if (sizeof(bmpHdr) != 54)
+	printf("Size of bmpHeader = %d\n", sizeof(bmpHdr));
+	printf("Size of Point = %d\n", sizeof(struct Point));
+	if (sizeof(bmpHdr) != 62)
 	{
-		printf("Size of structure bmpHdr must be 54.\n");
+		printf("Size of structure bmpHdr must be 62.\n");
 		return 1;
 	}
+	
+		
+	
 
-	pInfo = InitImage(256, 256);
+	pInfo = InitScreen(512, 512);
 
-   	char* input = "+F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F";
-	int length = 114;
-	Point start,end;
+   	char* input = generate_instruction(1);
+	size_t length = strlen(input);
+
 	start.x = 0;
 	start.y = 0;
-	end.x = 0;
+	end.x = 17;
 	end.y = 0;
-	for(unsigned int i = 0; i < length; ++i)
+	size_t i = 0;
+	for(i = 0; i < length; ++i)
 	{
 		if (input[i] == '+')
 		{
-			end = rotateRight(start,end);
+			end = rotateRight(start,end);		
 		}
 		else if (input[i] == '-')
 		{
-			end = rotateRight(start,end);
+			end = rotateLeft(start,end);
 		}
 		else if (input[i] == 'F')
 		{
-			MoveForward(start,end);
-		}
-		printf("End point X: %d , Y: %d \n",end.x,end.y);
+			MoveForward(pInfo,start,end);
+		}	
 	}
 	
 
 
-	if (saveBMP(pInfo, "triangles.bmp") != 0)
+	if (saveBMP(pInfo, "result.bmp") != 0)
 	{
 		printf("Error saving file.\n");
 		return 3;
 	}
 
-	FreeImage(pInfo);
+	FreeScreen(pInfo);
 	return 0;
 }
