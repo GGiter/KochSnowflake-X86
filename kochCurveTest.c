@@ -8,8 +8,8 @@ struct Point{
 	int y;
 };
 //typedef struct Point Point;
-extern struct Point rotateRight(struct Point A, struct Point B);
-extern struct Point rotateLeft(struct Point A, struct Point B);
+extern struct Point rotateRight(struct Point A, struct Point B,int clockwise);
+extern struct Point rotateLeft(struct Point A, struct Point B,int clockwise);
 //extern Point bresenham(Point A,Point B);
 
 typedef struct
@@ -196,9 +196,10 @@ imgInfo* MoveTo(imgInfo* pImg, int x, int y)
 		pImg->cY = y;
 	return pImg;
 }
-void SetPixel(imgInfo* pImg, int x, int y)
+imgInfo* ImgData;
+void SetPixel(int x, int y)
 {
-	unsigned char *pPix = pImg->pImg + (((pImg->width + 31) >> 5) << 2) * y + (x >> 3);
+	unsigned char *pPix = ImgData->pImg + (((ImgData->width + 31) >> 5) << 2) * y + (x >> 3);
 	unsigned char mask = 0x80 >> (x & 0x07);
 	if (pImg->col)
 		*pPix |= mask;
@@ -283,28 +284,40 @@ imgInfo* LineTo(imgInfo* pImg, int x, int y)
 struct Point last_Point;
 struct Point start,end;
 
+#define CENTERX 200
+#define CENTERY 220
+
 void MoveForward(imgInfo* pInfo,struct Point A,struct Point B)
 {
 	
 	// move vector (x2,y2) by (x1,y1)
-	B.x = B.x + last_Point.x - A.x;
-	B.y = B.y + last_Point.y - A.y;
+	B.x = B.x + last_Point.x;
+	B.y = B.y + last_Point.y;
 	
-	A.x+=60;
-	A.y+=80;
-	B.x+=60;
-	B.y+=80;
+	A = last_Point;
 	
-	printf("Start point X: %d , Y: %d \n",A.x,A.y);
-	printf("End point X: %d , Y: %d \n",B.x,B.y);
+	printf("START point X: %d , Y: %d \n",A.x,A.y);
+	printf("END point X: %d , Y: %d \n",B.x,B.y);
+	
+	A.x+=CENTERX;
+	A.y+=CENTERY;
+	B.x+=CENTERX;
+	B.y+=CENTERY;
+	
+	
 	
 	MoveTo(pInfo,A.x,A.y);
 	LineTo(pInfo,B.x,B.y);
 	
+	last_Point.x = B.x - CENTERX;
+	last_Point.y = B.y - CENTERY;
+	
+	A.x-=CENTERX;
+	A.y-=CENTERY;
+	
 	start = last_Point;
 	
-	last_Point.x = B.x - 60;
-	last_Point.y = B.y - 80;
+
 }
 
 char* generate_instruction(size_t generation)
@@ -312,7 +325,7 @@ char* generate_instruction(size_t generation)
 	char* axiom = "+F--F--F";
 	char* instruction = axiom;
 	size_t i = 0;
-	for(i=0;i<generation;++i)
+	for(i=1;i<generation;++i)
 	{
 		char* new_instruction = "";
 		size_t size = strlen(instruction);
@@ -321,10 +334,19 @@ char* generate_instruction(size_t generation)
 		{
 			if(instruction[j]=='F')
 			{
-				new_instruction += "F+F--F+F;
+				char *temp = malloc(strlen(new_instruction)+8);
+				stpcpy(temp,new_instruction);
+				strcat(temp,"F+F--F+F");
+				new_instruction = temp;
 			}
 			else{
-				new_instruction += instruction[j];
+				char *temp = malloc(strlen(new_instruction)+1);
+				stpcpy(temp,new_instruction);
+				if(instruction[j]=='+')
+				strcat(temp,"+");
+				else
+				strcat(temp,"-");	
+				new_instruction = temp;
 			}
 		}
 		instruction = new_instruction;
@@ -352,24 +374,36 @@ int main(void)
 	
 
 	pInfo = InitScreen(512, 512);
+	ImgData = pInfo;
+
 
    	char* input = generate_instruction(1);
 	size_t length = strlen(input);
+	
+	printf("Length of input = %d\n",length);
+	printf("Instruction set = %s\n",input);
 
 	start.x = 0;
 	start.y = 0;
 	end.x = 17;
 	end.y = 0;
 	size_t i = 0;
+	struct Point zero;
+	zero.x=0;
+	zero.y=0;
 	for(i = 0; i < length; ++i)
 	{
 		if (input[i] == '+')
 		{
-			end = rotateRight(start,end);		
+			end = rotateRight(zero,end,1);	
+			printf("start point X: %d , Y: %d \n",start.x,start.y);			
+			printf("end point X: %d , Y: %d \n",end.x,end.y);
 		}
 		else if (input[i] == '-')
 		{
-			end = rotateLeft(start,end);
+			end = rotateLeft(zero,end,-1);
+			printf("start point X: %d , Y: %d \n",start.x,start.y);	
+			printf("end point X: %d , Y: %d \n",end.x,end.y);
 		}
 		else if (input[i] == 'F')
 		{
