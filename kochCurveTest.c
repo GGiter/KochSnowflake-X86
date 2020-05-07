@@ -10,6 +10,7 @@ struct Point{
 //typedef struct Point Point;
 extern struct Point rotateRight(struct Point A, struct Point B,int clockwise);
 extern struct Point rotateLeft(struct Point A, struct Point B,int clockwise);
+extern void draw_line(struct Point A,struct Point B);
 //extern Point bresenham(Point A,Point B);
 
 typedef struct
@@ -306,8 +307,9 @@ void MoveForward(imgInfo* pInfo,struct Point A,struct Point B)
 	
 	
 	
-	MoveTo(pInfo,A.x,A.y);
-	LineTo(pInfo,B.x,B.y);
+	//MoveTo(pInfo,A.x,A.y);
+	//LineTo(pInfo,B.x,B.y);
+	draw_line(A,B);
 	
 	last_Point.x = B.x - CENTERX;
 	last_Point.y = B.y - CENTERY;
@@ -323,6 +325,7 @@ void MoveForward(imgInfo* pInfo,struct Point A,struct Point B)
 char* generate_instruction(size_t generation)
 {
 	char* axiom = "+F--F--F";
+	char* rule = "F+F--F+F";
 	char* instruction = axiom;
 	size_t i = 0;
 	for(i=1;i<generation;++i)
@@ -336,7 +339,7 @@ char* generate_instruction(size_t generation)
 			{
 				char *temp = malloc(strlen(new_instruction)+8);
 				stpcpy(temp,new_instruction);
-				strcat(temp,"F+F--F+F");
+				strcat(temp,rule);
 				new_instruction = temp;
 			}
 			else{

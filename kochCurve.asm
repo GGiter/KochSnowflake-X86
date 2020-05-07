@@ -1,4 +1,12 @@
-
+struc   BRESENHAM
+    .x2 resd    1
+    .y2 resd    1
+    .dx resd    1
+    .dy resd    1
+    .ai resd    1
+    .bi resd    1
+    .SIZE   resb    1
+endstruc
 section .text
 global rotate
 global draw_line
@@ -58,15 +66,7 @@ rotate:
 	ret
 	
 	
-struc   BRESENHAM
-    .x2 resd    1
-    .y2 resd    1
-    .dx resd    1
-    .dy resd    1
-    .ai resd    1
-    .bi resd    1
-    .SIZE   resb    1
-endstruc
+
 
 
 ; edx - x1
@@ -74,7 +74,17 @@ endstruc
 ; ebx - x2
 ; ecx - y2
 draw_line:
-    ; zachowaj oryginalne rejestry
+
+	mov edx, [esp+8]
+	mov eax, [esp+12]
+	mov ebx, [esp+16]
+	mov ecx, [esp+20]
+	;mov edx, 0
+	;mov eax, 0
+	;mov ebx, 100
+	;mov ecx, 100
+
+    ; keep original registers
     push    ax
     push    bx
     push    cx
@@ -82,64 +92,63 @@ draw_line:
     push    si
     push    di
 
-    ; przygotuj miejsce pod zmienne
+    ; save space for variables
     sub esp,    BRESENHAM.SIZE
 
-    ; zachowaj pozycje początku linii
+    ; save position of the start of the line
     mov esi,    edx
     mov edi,    eax
 
-    ; zachowaj pozycje końca linii
+    ; save position for the end of the line
     mov dword [esp + BRESENHAM.x2], ebx
     mov dword [esp + BRESENHAM.y2], ecx
 
-    ; sprawdź oś x
+    ; check x
     ; x1 > x2
     cmp esi,    dword [esp + BRESENHAM.x2]
     ja  .reverse_x
 
-    ; kierunek osi x rosnąco
+    ; axis x is increasing
     mov dword [esp + BRESENHAM.dx], ebx ; dx =  x2
     sub dword [esp + BRESENHAM.dx], esi ; dx -= x1
     mov ebx,    1   ; xi =  1
 
-    ; sprawdź oś y
+    ; check y
     jmp .check_y
 
 .reverse_x:
-    ; kierunek osi x malejąco
+    ; axis x is decrasing
     mov dword [esp + BRESENHAM.dx], esi ; dx =  x1
     sub dword [esp + BRESENHAM.dx], ebx ; dx -= x2
     mov ebx,    -1  ; xi =  -1
 
 .check_y:
-    ; sprawdź oś y
+    ; check y
     ; y1 > y2
     cmp edi,    dword [esp + BRESENHAM.y2]
     ja  .reverse_y
 
-    ; kierunek osi y rosnąco
+    ;axis y is increasing
     mov dword [esp + BRESENHAM.dy], ecx ; dy =  y2
     sub dword [esp + BRESENHAM.dy], edi ; dy -= y1
     mov ecx,    1   ; yi =  1
 
-    ; kontynuuj
+    ; continue
     jmp .done
 
 .reverse_y:
-    ; kierunek osi y malejąco
+    ; axis x is decreasing
     mov dword [esp + BRESENHAM.dy], edi ; dy =  y1
     sub dword [esp + BRESENHAM.dy], ecx ; dy -= y2
     mov ecx,    -1  ; yi =  -1
 
 .done:
-    ; względem której osi rysować linię?
     ; dy > dx
     mov eax,    dword [esp + BRESENHAM.dy]
     cmp eax,    dword [esp + BRESENHAM.dx]
     ja  .osY
 
-    ; rysuj linię względem osi X
+    ; draw line in regard to axis X
     ; ai = dy
     ; d = dy
     mov edx,    eax ; d =   dy
@@ -152,42 +161,39 @@ draw_line:
     sub edx,    eax ; d -=  dx
 
 .loop_x:
-    ; wyświetl piksel o zdefiniowanym kolorze
-    ; ZAMIEŃ NA WŁASNĄ PROCEDURĘ WYŚWIETLANIA PIKSELI
     ; X = ESI, Y = EDI
     push EDI
 	push ESI
-    call SETPIXEL 
+    call SetPixel 
 	add esp,8
 
-    ; jeśli wyświetlony piksel znajduje się w punkcie końca linii, koniec
     ; x1 == x2
     cmp esi,    dword [esp + BRESENHAM.x2]
     je  .end
 
-    ; współczynnik ujemny?
+    ; is coefficient negative?
     ; d
     bt  edx,    VARIABLE_DWORD_SIGN
     jc  .loop_x_minus
 
-    ; oblicz pozycję następnego piksela w linii
+    ; calculate position of the next pixel
     add esi,    ebx ; x +=  xi
     add edi,    ecx ; y +=  yi
     add edx,    dword [esp + BRESENHAM.ai]  ; d +=  ai
 
-    ; rysuj linię
+    ; draw line
     jmp .loop_x
 
 .loop_x_minus:
-    ; oblicz pozycję następnego piksela w linii
+    ; calculate position of the next pixel
     add edx,    dword [esp + BRESENHAM.bi]  ; d +=  bi
     add esi,    ebx ; x +=  xi
 
-    ; rysuj linię
+    ; draw line
     jmp .loop_x
 
 .osY:
-    ; rysuj linię względem osi Y
+    ; draw line in regard to axis Y
     mov eax,    dword [esp + BRESENHAM.dx]  ; ai = dx
     mov edx,    eax ; d =   dx
     sub eax,    dword [esp + BRESENHAM.dy]  ; ai -= dy
@@ -199,45 +205,43 @@ draw_line:
     sub edx,    eax ; d -=  dy
 
 .loop_y:
-    ; wyświetl piksel o zdefiniowanym kolorze
-    ; ZAMIEŃ NA WŁASNĄ PROCEDURĘ WYŚWIETLANIA PIKSELI
     ; X = ESI, Y = EDI
 	push EDI
 	push ESI
-    call SETPIXEL 
+    call SetPixel
 	add esp,8
 
-    ; jeśli wyświetlony piksel znajduje się w punkcie końca linii, koniec
+
     ; y1 == y2
     cmp edi,    dword [esp + BRESENHAM.y2]
     je  .end
 
-    ; współczynnik ujemny?
+    ; is coefficient negative?
     ; d
     bt  edx,    VARIABLE_DWORD_SIGN
     jc  .loop_y_minus
 
-    ; oblicz pozycję następnego piksela w linii
+    ; calculate position of the next pixel
     add esi,    ebx ; x +=  xi
     add edi,    ecx ; y +=  yi
     add edx,    dword [esp + BRESENHAM.ai]  ; d +=  ai
 
-    ; rysuj linię
+    ; draw line
     jmp .loop_y
 
 .loop_y_minus:
-    ; oblicz pozycję następnego piksela w linii
+    ; calculate position of the next pixel
     add edx,    dword [esp + BRESENHAM.bi]  ; d +=  bi
     add edi,    ecx ; y +=  yi
 
-    ; rysuj linię
+    ; draw line
     jmp .loop_y
 
 .end:
-    ; usuń zmienne lokalne
+    ; remove local variables
     add esp,    BRESENHAM.SIZE
 
-    ; przywróć oryginalne rejestry
+    ; restore registers
     pop di
     pop si
     pop dx
@@ -245,7 +249,6 @@ draw_line:
     pop bx
     pop ax
 
-    ; powrót z procedury
     ret
 	
 	
