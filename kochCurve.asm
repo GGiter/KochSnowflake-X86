@@ -15,47 +15,35 @@ rotate:
 	push ebp
 	mov ebp,esp
 	mov ebx,[ebp+16] ;x2
-	sub ebx,[ebp+8] ;x2-x1
 	
 	sar ebx,1 ;x2*0.5
 	
 	mov eax,[ebp+20] ;y2
-	sub eax,[ebp+12] ;y2-y1
-	
+
 	sal eax,3 ;y2*8
 	sub eax,[ebp+20] ;y2-y2
-	add eax,[ebp+12] ;y2+y1
 	sar eax,3 ;y2/8
-	;mov edx,0
-	;mov ecx,8
-	;idiv ecx
-	;let's see if this works
-	
+
 	;negate y2 if we are rotating left
 	imul eax,[ebp+24] ;y2*(1 or -1)
 	sub ebx,eax ;x2-y2
-	add ebx,[ebp+8] ;x2+x1
 	
 	;result x2 -> ebx
 	
 	mov ecx,[ebp+16] ;x2
-	sub ecx,[ebp+8] ;x2 - x1
 	
 	sal ecx,3 ;x2*8
 	sub ecx,[ebp+16] ;x2-x2
-	add ecx,[ebp+8]; x2+x1
 	sar ecx,3 ;x2/8
 	
 	mov edx,[ebp+20] ;y2
-	sub edx,[ebp+12] ;y2-y1
-	
+
 	sar edx,1 ;y2*0,5
 	
 	;negate x2 as we are rotating left
 	imul ecx,[ebp+24] ;x2*(1 or -1)
 	
 	add ecx,edx ;x2*7/8 + y2*0,5
-	add ecx,[ebp+12] ;y2+y1
 	
 	;result y2 -> ecx
 	
@@ -75,22 +63,35 @@ rotate:
 ; ecx - y2
 draw_line:
 
-	mov edx, [esp+8]
-	mov eax, [esp+12]
-	mov ebx, [esp+16]
-	mov ecx, [esp+20]
-	;mov edx, 0
-	;mov eax, 0
-	;mov ebx, 100
-	;mov ecx, 100
+	;mov edx, [esp+8]
+	;mov eax, [esp+12]
+	;mov ebx, [esp+16]
+	;mov ecx, [esp+20]
+	;mov edx, 50
+	;mov eax, 10
+	;mov ebx, 60
+	;mov ecx, 10
+	
+	mov edx, [esp+4]
+	mov eax, [esp+8]
+	mov ebx, [esp+12]
+	mov ecx, [esp+16]
 
     ; keep original registers
-    push    ax
-    push    bx
-    push    cx
-    push    dx
-    push    si
-    push    di
+    push    eax
+    push    ebx
+    push    ecx
+    push    edx
+    push    esi
+    push    edi
+	
+	
+	
+	;mov edx, [esp+8]
+	;mov eax, [esp+12]
+	;mov ebx, [esp+16]
+	;mov ecx, [esp+20]
+
 
     ; save space for variables
     sub esp,    BRESENHAM.SIZE
@@ -103,13 +104,13 @@ draw_line:
     mov dword [esp + BRESENHAM.x2], ebx
     mov dword [esp + BRESENHAM.y2], ecx
 
-    ; check x
+.check_x:	
     ; x1 > x2
     cmp esi,    dword [esp + BRESENHAM.x2]
     ja  .reverse_x
 
     ; axis x is increasing
-    mov dword [esp + BRESENHAM.dx], ebx ; dx =  x2
+   	mov dword [esp + BRESENHAM.dx], ebx ; dx =  x2
     sub dword [esp + BRESENHAM.dx], esi ; dx -= x1
     mov ebx,    1   ; xi =  1
 
@@ -122,8 +123,8 @@ draw_line:
     sub dword [esp + BRESENHAM.dx], ebx ; dx -= x2
     mov ebx,    -1  ; xi =  -1
 
-.check_y:
-    ; check y
+.check_y:	
+	; check y
     ; y1 > y2
     cmp edi,    dword [esp + BRESENHAM.y2]
     ja  .reverse_y
@@ -153,37 +154,52 @@ draw_line:
     ; d = dy
     mov edx,    eax ; d =   dy
     sub eax,    dword [esp + BRESENHAM.dx]  ; ai -= dx
-    shl eax,    VARIABLE_MULTIPLE_BY_2
+    shl eax,    2
     mov dword [esp + BRESENHAM.ai], eax
-    shl edx,    VARIABLE_MULTIPLE_BY_2  ; d *   2
-    mov dword [esp + BRESENHAM.bi], edx ; bi =  d
+    shl edx,    2 ; d *   2
+    mov dword [esp + BRESENHAM.bi], edx ; bi =  dy*2
     mov eax,    dword [esp + BRESENHAM.dx]
     sub edx,    eax ; d -=  dx
 
 .loop_x:
     ; X = ESI, Y = EDI
-    push EDI
-	push ESI
+	push    eax
+    push    ebx
+    push    ecx
+    push    edx
+    push    edi
+    push    esi
+	
     call SetPixel 
-	add esp,8
+	pop    esi
+    pop    edi
+    pop    edx
+    pop    ecx
+    pop    ebx
+    pop    eax
+	
+	
+
 
     ; x1 == x2
     cmp esi,    dword [esp + BRESENHAM.x2]
-    je  .end
+	je .end
+	
+	
 
-    ; is coefficient negative?
-    ; d
-    bt  edx,    VARIABLE_DWORD_SIGN
-    jc  .loop_x_minus
+    
+    ; d < 0 ?
+    cmp  edx,    0
+    jl  .loop_x_minus
 
     ; calculate position of the next pixel
     add esi,    ebx ; x +=  xi
     add edi,    ecx ; y +=  yi
     add edx,    dword [esp + BRESENHAM.ai]  ; d +=  ai
-
+	
+	
     ; draw line
     jmp .loop_x
-
 .loop_x_minus:
     ; calculate position of the next pixel
     add edx,    dword [esp + BRESENHAM.bi]  ; d +=  bi
@@ -197,35 +213,47 @@ draw_line:
     mov eax,    dword [esp + BRESENHAM.dx]  ; ai = dx
     mov edx,    eax ; d =   dx
     sub eax,    dword [esp + BRESENHAM.dy]  ; ai -= dy
-    shl eax,    VARIABLE_MULTIPLE_BY_2
+    shl eax,    2
     mov dword [esp + BRESENHAM.ai], eax
-    shl edx,    VARIABLE_MULTIPLE_BY_2  ; d *   2
+    shl edx,    2  ; d *   2
     mov dword [esp + BRESENHAM.bi], edx ; bi =  d
     mov eax,    dword [esp + BRESENHAM.dy]
     sub edx,    eax ; d -=  dy
 
 .loop_y:
     ; X = ESI, Y = EDI
-	push EDI
-	push ESI
-    call SetPixel
-	add esp,8
-
+	push    eax
+    push    ebx
+    push    ecx
+    push    edx
+    push    edi
+    push    esi
+	
+    call SetPixel 
+	pop    esi
+    pop    edi
+    pop    edx
+    pop    ecx
+    pop    ebx
+    pop    eax
+	
+	
+	
+	
 
     ; y1 == y2
     cmp edi,    dword [esp + BRESENHAM.y2]
     je  .end
-
-    ; is coefficient negative?
-    ; d
-    bt  edx,    VARIABLE_DWORD_SIGN
-    jc  .loop_y_minus
+	
+    ; 
+    ; d < 0
+    cmp  edx,    0
+    jl  .loop_y_minus
 
     ; calculate position of the next pixel
     add esi,    ebx ; x +=  xi
     add edi,    ecx ; y +=  yi
     add edx,    dword [esp + BRESENHAM.ai]  ; d +=  ai
-
     ; draw line
     jmp .loop_y
 
@@ -238,16 +266,24 @@ draw_line:
     jmp .loop_y
 
 .end:
+
+	;cmp edi,    dword [esp + BRESENHAM.y2]
+    ;jne  .check_x
+	
+	;cmp esi,    dword [esp + BRESENHAM.x2]
+   ; jne  .check_x
+
     ; remove local variables
     add esp,    BRESENHAM.SIZE
+	
 
     ; restore registers
-    pop di
-    pop si
-    pop dx
-    pop cx
-    pop bx
-    pop ax
+    pop    edi
+    pop    esi
+    pop    edx
+    pop    ecx
+    pop    ebx
+    pop    eax
 
     ret
 	

@@ -7,9 +7,16 @@ struct Point{
 	int x;
 	int y;
 };
+void prepare_point(struct Point* A)
+{
+	float w = sqrtf(A->x*A->x + A->y*A->y);
+	float x = (A->x/w)*17;
+	float y = (A->y/w)*17;
+	A->x = (int)x;
+	A->y = (int)y;
+}
 //typedef struct Point Point;
-extern struct Point rotateRight(struct Point A, struct Point B,int clockwise);
-extern struct Point rotateLeft(struct Point A, struct Point B,int clockwise);
+extern struct Point rotate(struct Point A, struct Point B,int clockwise);
 extern void draw_line(struct Point A,struct Point B);
 //extern Point bresenham(Point A,Point B);
 
@@ -200,9 +207,10 @@ imgInfo* MoveTo(imgInfo* pImg, int x, int y)
 imgInfo* ImgData;
 void SetPixel(int x, int y)
 {
+	//printf("Pixels %d,%d\n",x,y);
 	unsigned char *pPix = ImgData->pImg + (((ImgData->width + 31) >> 5) << 2) * y + (x >> 3);
 	unsigned char mask = 0x80 >> (x & 0x07);
-	if (pImg->col)
+	if (ImgData->col)
 		*pPix |= mask;
 	else
 		*pPix &= ~mask;
@@ -227,7 +235,7 @@ imgInfo* LineTo(imgInfo* pImg, int x, int y)
 	} 
 
 	// first pixel
-	SetPixel(pImg, cx, cy);
+	SetPixel(cx, cy);
 
 	// horizontal drawing 
 	if (dx > dy)
@@ -250,7 +258,7 @@ imgInfo* LineTo(imgInfo* pImg, int x, int y)
 				d += bi;
 				cx += xi;
 			}
-			SetPixel(pImg, cx, cy);
+			SetPixel(cx, cy);
 		}
 	} 
 	// vertical drawing
@@ -274,7 +282,7 @@ imgInfo* LineTo(imgInfo* pImg, int x, int y)
 				d += bi;
 				cy += yi;
 			}
-			SetPixel(pImg, cx, cy);
+			SetPixel(cx, cy);
 		}
 	}
 	pImg->cX = x;
@@ -295,7 +303,8 @@ void MoveForward(imgInfo* pInfo,struct Point A,struct Point B)
 	B.x = B.x + last_Point.x;
 	B.y = B.y + last_Point.y;
 	
-	A = last_Point;
+	A.x = last_Point.x;
+	A.y = last_Point.y;
 	
 	printf("START point X: %d , Y: %d \n",A.x,A.y);
 	printf("END point X: %d , Y: %d \n",B.x,B.y);
@@ -307,9 +316,9 @@ void MoveForward(imgInfo* pInfo,struct Point A,struct Point B)
 	
 	
 	
-	//MoveTo(pInfo,A.x,A.y);
-	//LineTo(pInfo,B.x,B.y);
-	draw_line(A,B);
+	MoveTo(pInfo,A.x,A.y);
+	LineTo(pInfo,B.x,B.y);
+	//draw_line(A,B);
 	
 	last_Point.x = B.x - CENTERX;
 	last_Point.y = B.y - CENTERY;
@@ -321,11 +330,41 @@ void MoveForward(imgInfo* pInfo,struct Point A,struct Point B)
 	
 
 }
+#define ERR_MESSAGE__NO_MEM "Not enough memory!"
+#define allocator(element, type) _allocator(element, sizeof(type))
 
+/** Allocator function (safe alloc) */
+void* _allocator(size_t element, size_t typeSize)
+{
+    void *ptr = NULL;
+    /* check alloc */
+    if( (ptr = calloc(element, typeSize)) == NULL)
+    {printf(ERR_MESSAGE__NO_MEM); exit(1);}
+    /* return pointer */
+    return ptr;
+}
+
+/** Append function (safe mode) */
+char* append(const char *input, const char c)
+{
+    char *newString, *ptr;
+
+    /* alloc */
+    newString = allocator((strlen(input) + 2), char);
+    /* Copy old string in new (with pointer) */
+    ptr = newString;
+    for(; *input; input++) {*ptr = *input; ptr++;}
+    /* Copy char at end */
+    *ptr = c;
+    /* return new string (for dealloc use free().) */
+    return newString;
+}
 char* generate_instruction(size_t generation)
 {
 	char* axiom = "+F--F--F";
 	char* rule = "F+F--F+F";
+	char plus = '+';
+	char minus = '-';
 	char* instruction = axiom;
 	size_t i = 0;
 	for(i=1;i<generation;++i)
@@ -337,19 +376,15 @@ char* generate_instruction(size_t generation)
 		{
 			if(instruction[j]=='F')
 			{
-				char *temp = malloc(strlen(new_instruction)+8);
-				stpcpy(temp,new_instruction);
-				strcat(temp,rule);
-				new_instruction = temp;
+				size_t k;
+				for (k=0;k<strlen(rule);++k)
+				  new_instruction = append(new_instruction,rule[k]);
 			}
-			else{
-				char *temp = malloc(strlen(new_instruction)+1);
-				stpcpy(temp,new_instruction);
-				if(instruction[j]=='+')
-				strcat(temp,"+");
-				else
-				strcat(temp,"-");	
-				new_instruction = temp;
+			else if (instruction[j]=='+'){
+				new_instruction = append(new_instruction,plus);
+			}
+			else if (instruction[j]=='-'){
+				new_instruction = append(new_instruction,minus);
 			}
 		}
 		instruction = new_instruction;
@@ -380,7 +415,7 @@ int main(void)
 	ImgData = pInfo;
 
 
-   	char* input = generate_instruction(1);
+   	char* input = generate_instruction(3);
 	size_t length = strlen(input);
 	
 	printf("Length of input = %d\n",length);
@@ -398,14 +433,16 @@ int main(void)
 	{
 		if (input[i] == '+')
 		{
-			end = rotateRight(zero,end,1);	
-			printf("start point X: %d , Y: %d \n",start.x,start.y);			
+			printf("end before point X: %d , Y: %d \n",end.x,end.y);	
+			end = rotate(zero,end,1);
+			prepare_point(&end);
 			printf("end point X: %d , Y: %d \n",end.x,end.y);
 		}
 		else if (input[i] == '-')
 		{
-			end = rotateLeft(zero,end,-1);
-			printf("start point X: %d , Y: %d \n",start.x,start.y);	
+			printf("end before point X: %d , Y: %d \n",end.x,end.y);	
+			end = rotate(zero,end,-1);
+			prepare_point(&end);
 			printf("end point X: %d , Y: %d \n",end.x,end.y);
 		}
 		else if (input[i] == 'F')
