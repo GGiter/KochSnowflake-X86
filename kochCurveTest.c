@@ -2,24 +2,27 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <math.h>
-#define _cdecl __attribute__((__cdecl__))
+#define LINE_LENGTH 17
+#define DEBUG 0
+#define CENTERX 200
+#define CENTERY 220
 struct Point{
 	int x;
 	int y;
 };
-void prepare_point(struct Point* A)
+typedef struct Point Point;
+/* normalize vector and multiply it by LINE_LENGTH */
+void prepare_point(Point* A)
 {
 	float w = sqrtf(A->x*A->x + A->y*A->y);
-	float x = (A->x/w)*17;
-	float y = (A->y/w)*17;
+	float x = (A->x/w)*LINE_LENGTH;
+	float y = (A->y/w)*LINE_LENGTH;
 	A->x = (int)x;
 	A->y = (int)y;
 }
-//typedef struct Point Point;
-extern struct Point rotate(struct Point A, struct Point B,int clockwise);
-extern void draw_line(struct Point A,struct Point B);
-//extern Point bresenham(Point A,Point B);
-
+/* asm functions */
+extern struct Point rotate(Point B,int clockwise);
+extern void draw_line(Point A,Point B);
 typedef struct
 {
 	unsigned short bfType; 
@@ -44,10 +47,9 @@ typedef struct
 
 typedef struct
 {
-	int width, height;		// szerokosc i wysokosc obrazu
-	unsigned char* pImg;	// wskazanie na poczatek danych pikselowych
-	int cX, cY;				// "aktualne wspólrzedne" 
-	int col;				// "aktualny kolor"
+	int width, height;		// width and height of the image
+	unsigned char* pImg;	// pointer to the beginning of the pointer data
+	int col;				// current color
 } imgInfo;
 
 void* freeResources(FILE* pFile, void* pFirst, void* pSnd)
@@ -60,7 +62,7 @@ void* freeResources(FILE* pFile, void* pFirst, void* pSnd)
 		free(pSnd);
 	return 0;
 }
-
+/* Reading and saving BMP file */
 imgInfo* readBMP(const char* fname)
 {
 	imgInfo* pInfo = 0;
@@ -161,7 +163,6 @@ int saveBMP(const imgInfo* pInfo, const char* fname)
 	fclose(fbmp);
 	return 0;
 }
-
 /****************************************************************************************/
 imgInfo* InitScreen (int w, int h)
 {
@@ -177,8 +178,6 @@ imgInfo* InitScreen (int w, int h)
 		return 0;
 	}
 	memset(pImg->pImg, 0xFF, (((w + 31) >> 5) << 2) * h);
-	pImg->cX = 0;
-	pImg->cY = 0;
 	pImg->col = 0;
 	return pImg;
 }
@@ -190,24 +189,9 @@ void FreeScreen(imgInfo* pInfo)
 	if (pInfo)
 		free(pInfo);
 }
-imgInfo* SetColor(imgInfo* pImg, int col)
-{
-	pImg->col = col != 0;
-	return pImg;
-}
-
-imgInfo* MoveTo(imgInfo* pImg, int x, int y)
-{
-	if (x >= 0 && x < pImg->width)
-		pImg->cX = x;
-	if (y >= 0 && y < pImg->height)
-		pImg->cY = y;
-	return pImg;
-}
 imgInfo* ImgData;
 void SetPixel(int x, int y)
 {
-	//printf("Pixels %d,%d\n",x,y);
 	unsigned char *pPix = ImgData->pImg + (((ImgData->width + 31) >> 5) << 2) * y + (x >> 3);
 	unsigned char mask = 0x80 >> (x & 0x07);
 	if (ImgData->col)
@@ -215,150 +199,47 @@ void SetPixel(int x, int y)
 	else
 		*pPix &= ~mask;
 }
-imgInfo* LineTo(imgInfo* pImg, int x, int y)
+/* move forward and update start point */
+void moveForward(Point* A,Point B)
 {
-	// draws line segment between current position and (x,y)
-	int cx = pImg->cX, cy = pImg->cY;
-	int dx = x - cx, xi = 1, dy = y - cy, yi = 1;
-	int d, ai, bi;
-
-	if (dx < 0)
-	{ 
-		xi = -1;
-		dx = -dx;
-	} 
-
-	if (dy < 0)
-	{ 
-		yi = -1;
-		dy = -dy;
-	} 
-
-	// first pixel
-	SetPixel(cx, cy);
-
-	// horizontal drawing 
-	if (dx > dy)
+	/* move vector (x2,y2) by (x1,y1) */
+	B.x += A->x;
+	B.y += A->y;
+		
+	if (DEBUG)
 	{
-		ai = (dy - dx) * 2;
-		bi = dy * 2;
-		d = bi - dx;
-		// for each x
-		while (cx != x)
-		{ 
-			// check line move indicator
-			if (d >= 0)
-			{ 
-				cx += xi;
-				cy += yi;
-				d += ai;
-			} 
-			else
-			{
-				d += bi;
-				cx += xi;
-			}
-			SetPixel(cx, cy);
-		}
-	} 
-	// vertical drawing
-	else
-	{ 
-		ai = ( dx - dy ) * 2;
-		bi = dx * 2;
-		d = bi - dy;
-		// for each y
-		while (cy != y)
-		{ 
-			// check column move indicator
-			if (d >= 0)
-			{ 
-				cx += xi;
-				cy += yi;
-				d += ai;
-			}
-			else
-			{
-				d += bi;
-				cy += yi;
-			}
-			SetPixel(cx, cy);
-		}
+		printf("START point X: %d , Y: %d \n",A->x,A->y);
+		printf("END point X: %d , Y: %d \n",B.x,B.y);
 	}
-	pImg->cX = x;
-	pImg->cY = y;
-	return pImg;
-}
-
-struct Point last_Point;
-struct Point start,end;
-
-#define CENTERX 200
-#define CENTERY 220
-
-void MoveForward(imgInfo* pInfo,struct Point A,struct Point B)
-{
 	
-	// move vector (x2,y2) by (x1,y1)
-	B.x = B.x + last_Point.x;
-	B.y = B.y + last_Point.y;
-	
-	A.x = last_Point.x;
-	A.y = last_Point.y;
-	
-	printf("START point X: %d , Y: %d \n",A.x,A.y);
-	printf("END point X: %d , Y: %d \n",B.x,B.y);
-	
-	A.x+=CENTERX;
-	A.y+=CENTERY;
+	/* move vector by (CENTERX,CENTERY) */
+	A->x+=CENTERX;
+	A->y+=CENTERY;
 	B.x+=CENTERX;
 	B.y+=CENTERY;
 	
+	draw_line(*A,B);
 	
+	/* set new start point */
+	A->x = B.x - CENTERX;
+	A->y = B.y - CENTERY;
 	
-	MoveTo(pInfo,A.x,A.y);
-	LineTo(pInfo,B.x,B.y);
-	//draw_line(A,B);
-	
-	last_Point.x = B.x - CENTERX;
-	last_Point.y = B.y - CENTERY;
-	
-	A.x-=CENTERX;
-	A.y-=CENTERY;
-	
-	start = last_Point;
-	
-
 }
-#define ERR_MESSAGE__NO_MEM "Not enough memory!"
-#define allocator(element, type) _allocator(element, sizeof(type))
-
-/** Allocator function (safe alloc) */
-void* _allocator(size_t element, size_t typeSize)
-{
-    void *ptr = NULL;
-    /* check alloc */
-    if( (ptr = calloc(element, typeSize)) == NULL)
-    {printf(ERR_MESSAGE__NO_MEM); exit(1);}
-    /* return pointer */
-    return ptr;
-}
-
-/** Append function (safe mode) */
+/* append to char* helper function */
 char* append(const char *input, const char c)
 {
     char *newString, *ptr;
-
     /* alloc */
-    newString = allocator((strlen(input) + 2), char);
+    newString = calloc((strlen(input) + 2), sizeof(char));
     /* Copy old string in new (with pointer) */
     ptr = newString;
     for(; *input; input++) {*ptr = *input; ptr++;}
     /* Copy char at end */
     *ptr = c;
-    /* return new string (for dealloc use free().) */
+    /* return new string */
     return newString;
 }
+/* generate l-system instructions */
 char* generate_instruction(size_t generation)
 {
 	char* axiom = "+F--F--F";
@@ -395,13 +276,8 @@ char* generate_instruction(size_t generation)
 
 int main(void)
 {
-	imgInfo* pInfo;
 	
-	last_Point.x=0;
-	last_Point.y=0;
-
 	printf("Size of bmpHeader = %d\n", sizeof(bmpHdr));
-	printf("Size of Point = %d\n", sizeof(struct Point));
 	if (sizeof(bmpHdr) != 62)
 	{
 		printf("Size of structure bmpHdr must be 62.\n");
@@ -409,56 +285,45 @@ int main(void)
 	}
 	
 		
-	
-
-	pInfo = InitScreen(512, 512);
-	ImgData = pInfo;
-
-
+	ImgData = InitScreen(512, 512);
+	/* generate instructions */
    	char* input = generate_instruction(3);
 	size_t length = strlen(input);
 	
-	printf("Length of input = %d\n",length);
+	/* print instructions */
 	printf("Instruction set = %s\n",input);
-
+	
+	Point start,end;
+	/* main instruction loop */
 	start.x = 0;
 	start.y = 0;
-	end.x = 17;
+	end.x = LINE_LENGTH;
 	end.y = 0;
 	size_t i = 0;
-	struct Point zero;
-	zero.x=0;
-	zero.y=0;
 	for(i = 0; i < length; ++i)
 	{
 		if (input[i] == '+')
 		{
-			printf("end before point X: %d , Y: %d \n",end.x,end.y);	
-			end = rotate(zero,end,1);
+			end = rotate(end,1);
 			prepare_point(&end);
-			printf("end point X: %d , Y: %d \n",end.x,end.y);
 		}
 		else if (input[i] == '-')
 		{
-			printf("end before point X: %d , Y: %d \n",end.x,end.y);	
-			end = rotate(zero,end,-1);
+			end = rotate(end,-1);
 			prepare_point(&end);
-			printf("end point X: %d , Y: %d \n",end.x,end.y);
 		}
 		else if (input[i] == 'F')
 		{
-			MoveForward(pInfo,start,end);
+			moveForward(&start,end);
 		}	
 	}
 	
-
-
-	if (saveBMP(pInfo, "result.bmp") != 0)
+	if (saveBMP(ImgData, "result.bmp") != 0)
 	{
 		printf("Error saving file.\n");
 		return 3;
 	}
 
-	FreeScreen(pInfo);
+	FreeScreen(ImgData);
 	return 0;
 }
