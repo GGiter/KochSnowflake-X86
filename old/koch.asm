@@ -12,36 +12,36 @@ global rotate
 global draw_line
 extern SetPixel	
 rotate:
-	push ebp
-	mov ebp,esp
-	mov ebx,[ebp+8] ;x2
+	push esp
+	mov esp,esp
+	mov ebx,[esp+8] ;x2
 	
 	sar ebx,1 ;x2*0.5
 	
-	mov eax,[ebp+12] ;y2
+	mov eax,[esp+12] ;y2
 
 	sal eax,3 ;y2*8
-	sub eax,[ebp+12] ;y2-y2
+	sub eax,[esp+12] ;y2-y2
 	sar eax,3 ;y2/8
 
 	;negate y2 if we are rotating left
-	imul eax,[ebp+16] ;y2*(1 or -1)
+	imul eax,[esp+16] ;y2*(1 or -1)
 	sub ebx,eax ;x2-y2
 	
 	;result x2 -> ebx
 	
-	mov ecx,[ebp+8] ;x2
+	mov ecx,[esp+8] ;x2
 	
 	sal ecx,3 ;x2*8
-	sub ecx,[ebp+8] ;x2-x2
+	sub ecx,[esp+8] ;x2-x2
 	sar ecx,3 ;x2/8
 	
-	mov edx,[ebp+12] ;y2
+	mov edx,[esp+12] ;y2
 
 	sar edx,1 ;y2*0,5
 	
 	;negate x2 as we are rotating left
-	imul ecx,[ebp+16] ;x2*(1 or -1)
+	imul ecx,[esp+16] ;x2*(1 or -1)
 	
 	add ecx,edx ;x2*7/8 + y2*0,5
 	
@@ -50,26 +50,18 @@ rotate:
 	mov eax,ebx ;int x 
 	mov edx,ecx ;int y
 	
-	pop ebp
+	pop esp
 	ret
 	
 	
 ; draw line algorithm based on LineTo from C file
 draw_line:
-
 	mov edx, [esp+4] ;X1
 	mov eax, [esp+8] ;Y1
 	mov ebx, [esp+12] ;X2
 	mov ecx, [esp+16] ;Y2
-
-    ; keep original registers
-    push    eax
-    push    ebx
-    push    ecx
-    push    edx
-    push    esi
-    push    edi
-    ; save space for variables
+	
+    ; save space for local variables
     sub esp,    LINE.SIZE
 
     ; save position of the start of the line
@@ -137,14 +129,16 @@ draw_line:
     mov eax,    dword [esp + LINE.dx]
     sub edx,    eax ; d -=  dx
 
-.loop_x:
+.loop_x: ; horizontal draw
     ; x = esi, y = edi
+	; push values on the stack
 	push    eax
     push    ebx
     push    ecx
     push    edx
     push    edi
     push    esi
+	; pop values from the stack
     call SetPixel 
 	pop    esi
     pop    edi
@@ -169,7 +163,7 @@ draw_line:
 	
     ; draw line
     jmp .loop_x
-.loop_x_minus:
+.loop_x_minus: ; vertical draw
     ; calculate position of the next pixel
     add edx,    dword [esp + LINE.bi]  ; d +=  bi
     add esi,    ebx ; x +=  xi
@@ -191,6 +185,7 @@ draw_line:
 
 .loop_y:
     ; x = esi, y = edi
+	; push values on the stack
 	push    eax
     push    ebx
     push    ecx
@@ -198,6 +193,7 @@ draw_line:
     push    edi
     push    esi
     call SetPixel 
+	; pop values from the stack
 	pop    esi
     pop    edi
     pop    edx
@@ -231,15 +227,6 @@ draw_line:
 .end:
     ; remove local variables
     add esp,    LINE.SIZE
-	
-    ; restore registers
-    pop    edi
-    pop    esi
-    pop    edx
-    pop    ecx
-    pop    ebx
-    pop    eax
-
     ret
 	
 	

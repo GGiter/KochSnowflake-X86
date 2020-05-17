@@ -20,9 +20,6 @@ void prepare_point(Point* A)
 	A->x = (int)x;
 	A->y = (int)y;
 }
-/* asm functions */
-extern struct Point rotate(Point B,int clockwise);
-extern void draw_line(Point A,Point B);
 typedef struct
 {
 	unsigned short bfType; 
@@ -47,11 +44,15 @@ typedef struct
 
 typedef struct
 {
-	int width, height;		// width and height of the image
-	unsigned char* pImg;	// pointer to the beginning of the pointer data
+	
+	int width;		
+	unsigned char* pImg; // pointer to the beginning of the pointer  data	
+	int height;
 	int col;				// current color
 } imgInfo;
-
+/* asm functions */
+extern struct Point rotate(Point B,int clockwise);
+extern void draw_line(Point A,Point B,int width,unsigned char* pImg);
 void* freeResources(FILE* pFile, void* pFirst, void* pSnd)
 {
 	if (pFile != 0)
@@ -189,18 +190,8 @@ void FreeScreen(imgInfo* pInfo)
 	if (pInfo)
 		free(pInfo);
 }
-imgInfo* ImgData;
-void SetPixel(int x, int y)
-{
-	unsigned char *pPix = ImgData->pImg + (((ImgData->width + 31) >> 5) << 2) * y + (x >> 3);
-	unsigned char mask = 0x80 >> (x & 0x07);
-	if (ImgData->col)
-		*pPix |= mask;
-	else
-		*pPix &= ~mask;
-}
 /* move forward and update start point */
-void moveForward(Point* A,Point B)
+void moveForward(Point* A,Point B,imgInfo* ImgData)
 {
 	/* move vector (x2,y2) by (x1,y1) */
 	B.x += A->x;
@@ -218,7 +209,7 @@ void moveForward(Point* A,Point B)
 	B.x+=CENTERX;
 	B.y+=CENTERY;
 	
-	draw_line(*A,B);
+	draw_line(*A,B,ImgData->width,ImgData->pImg);
 	
 	/* set new start point */
 	A->x = B.x - CENTERX;
@@ -229,14 +220,14 @@ void moveForward(Point* A,Point B)
 char* append(const char *input, const char c)
 {
     char *newString, *ptr;
-    /* alloc */
+
     newString = calloc((strlen(input) + 2), sizeof(char));
-    /* Copy old string in new (with pointer) */
+
     ptr = newString;
     for(; *input; input++) {*ptr = *input; ptr++;}
     /* Copy char at end */
     *ptr = c;
-    /* return new string */
+
     return newString;
 }
 /* generate l-system instructions */
@@ -276,7 +267,7 @@ char* generate_instruction(size_t generation)
 
 int main(void)
 {
-	
+	imgInfo* ImgData;
 	printf("Size of bmpHeader = %d\n", sizeof(bmpHdr));
 	if (sizeof(bmpHdr) != 62)
 	{
@@ -291,7 +282,7 @@ int main(void)
 	size_t length = strlen(input);
 	
 	/* print instructions */
-	printf("Instruction set = %s\n",input);
+	printf("Instruction = %s\n",input);
 	
 	Point start,end;
 	/* main instruction loop */
@@ -314,9 +305,11 @@ int main(void)
 		}
 		else if (input[i] == 'F')
 		{
-			moveForward(&start,end);
+			moveForward(&start,end,ImgData);
 		}	
 	}
+	
+
 	
 	if (saveBMP(ImgData, "result.bmp") != 0)
 	{
