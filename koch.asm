@@ -1,10 +1,10 @@
 struc   LINE
-    .x2 resd    1
-    .y2 resd    1
-    .dx resd    1
-    .dy resd    1
-    .ai resd    1
-    .bi resd    1
+    .x2 resq    1
+    .y2 resq    1
+    .dx resq    1
+    .dy resq    1
+    .ai resq    1
+    .bi resq    1
     .SIZE   resb    1
 endstruc
 section .text
@@ -12,264 +12,283 @@ global rotate
 global draw_line
 global put_pixel
 rotate:
-	push ebp
-	mov ebp,esp
-	mov ebx,[ebp+8] ;x2
-	
-	sar ebx,1 ;x2*0.5
-	
-	mov eax,[ebp+12] ;y2
+	sub rsp , 8
+	push rbx  
+	push rbp
 
-	sal eax,3 ;y2*8
-	sub eax,[ebp+12] ;y2-y2
-	sar eax,3 ;y2/8
+	mov rbx,rdi ;x2
+	
+	sar rbx,1 ;x2*0.5
+	
+	mov rax,rsi ;y2
+
+	sal rax,3 ;y2*8
+	sub rax,rsi ;y2-y2
+	sar rax,3 ;y2/8
 
 	;negate y2 if we are rotating left
-	imul eax,[ebp+16] ;y2*(1 or -1)
-	sub ebx,eax ;x2-y2
+	imul rax,rdx ;y2*(1 or -1)
+	sub rbx,rax ;x2-y2
 	
 	;result x2 -> ebx
 	
-	mov ecx,[ebp+8] ;x2
+	mov rcx,rdi ;x2
 	
-	sal ecx,3 ;x2*8
-	sub ecx,[ebp+8] ;x2-x2
-	sar ecx,3 ;x2/8
+	sal rcx,3 ;x2*8
+	sub rcx,rdi ;x2-x2
+	sar rcx,3 ;x2/8
 	
-	mov edx,[ebp+12] ;y2
+	mov r10,rsi ;y2
 
-	sar edx,1 ;y2*0,5
+	sar r10,1 ;y2*0,5
 	
+
 	;negate x2 as we are rotating left
-	imul ecx,[ebp+16] ;x2*(1 or -1)
+	imul rcx,rdx;x2*(1 or -1)
+
 	
-	add ecx,edx ;x2*7/8 + y2*0,5
+	add rcx,r10 ;x2*7/8 + y2*0,5
 	
 	;result y2 -> ecx
 	
-	mov eax,ebx ;int x 
-	mov edx,ecx ;int y
+	mov rax,rbx ;int x 
+	mov rdx,rcx ;int y
 	
-	pop ebp
+	pop rbp 
+	pop rbx
+	add rsp , 8 
+	
 	ret
 	
 	
 ; draw line algorithm based on LineTo from C file
 draw_line:
-	mov edx, [esp+4] ;X1
-	mov eax, [esp+8] ;Y1
-	mov ebx, [esp+12] ;X2
-	mov ecx, [esp+16] ;Y2
+	sub rsp , 8
+	push rbx  
+	push rbp
+
+	push rdx
+	mov rdx, rdi ;X1
+	mov rax, rsi ;Y1
+	pop rbx
+	mov rcx, rcx ;Y2
 	
     ; save space for local variables
-    sub esp,    LINE.SIZE
+    sub rsp,    LINE.SIZE
 	 ; save position of the start of the line
-    mov esi,    edx
-    mov edi,    eax
+    mov rsi,    rdx
+    mov rdi,    rax
 	
     ; save position for the end of the line
-    mov dword [esp + LINE.x2], ebx
-    mov dword [esp + LINE.y2], ecx
+    mov qword [rsp + LINE.x2], rbx
+    mov qword [rsp + LINE.y2], rcx
+	
+
 
 .check_x:	
     ; x1 > x2
-    cmp esi,    dword [esp + LINE.x2]
+    cmp rsi,    qword [rsp + LINE.x2]
     ja  .reverse_x
 
     ; axis x is increasing
-   	mov dword [esp + LINE.dx], ebx ; dx =  x2
-    sub dword [esp + LINE.dx], esi ; dx -= x1
-    mov ebx,    1   ; xi =  1
+   	mov qword [rsp + LINE.dx], rbx ; dx =  x2
+    sub qword [rsp + LINE.dx], rsi ; dx -= x1
+    mov rbx,    1   ; xi =  1
 
     ; check y
     jmp .check_y
 
 .reverse_x:
     ; axis x is decreasing
-    mov dword [esp + LINE.dx], esi ; dx =  x1
-    sub dword [esp + LINE.dx], ebx ; dx -= x2
-    mov ebx,    -1  ; xi =  -1
+    mov qword [rsp + LINE.dx], rsi ; dx =  x1
+    sub qword [rsp + LINE.dx], rbx ; dx -= x2
+    mov rbx,    -1  ; xi =  -1
 
 .check_y:	
 	; check y
     ; y1 > y2
-    cmp edi,    dword [esp + LINE.y2]
+    cmp rdi,    qword [rsp + LINE.y2]
     ja  .reverse_y
 
     ;axis y is increasing
-    mov dword [esp + LINE.dy], ecx ; dy =  y2
-    sub dword [esp + LINE.dy], edi ; dy -= y1
-    mov ecx,    1   ; yi =  1
+    mov qword [rsp + LINE.dy], rcx ; dy =  y2
+    sub qword [rsp + LINE.dy], rdi ; dy -= y1
+    mov rcx,    1   ; yi =  1
 
     ; continue
     jmp .done
 
 .reverse_y:
     ; axis x is decreasing
-    mov dword [esp + LINE.dy], edi ; dy =  y1
-    sub dword [esp + LINE.dy], ecx ; dy -= y2
-    mov ecx,    -1  ; yi =  -1
+    mov qword [rsp + LINE.dy], rdi ; dy =  y1
+    sub qword [rsp + LINE.dy], rcx ; dy -= y2
+    mov rcx,    -1  ; yi =  -1
 
 .done:
     ; dy > dx
-    mov eax,    dword [esp + LINE.dy]
-    cmp eax,    dword [esp + LINE.dx]
+    mov rax,    qword [rsp + LINE.dy]
+    cmp rax,    qword [rsp + LINE.dx]
     ja  .osY
 
     ; draw line in regard to axis X
     ; ai = dy
     ; d = dy
-    mov edx,    eax ; d =   dy
-    sub eax,    dword [esp + LINE.dx]  ; ai -= dx
-    shl eax,    2
-    mov dword [esp + LINE.ai], eax
-    shl edx,    2 ; d *   2
-    mov dword [esp + LINE.bi], edx ; bi =  dy*2
-    mov eax,    dword [esp + LINE.dx]
-    sub edx,    eax ; d -=  dx
+    mov rdx,    rax ; d =   dy
+    sub rax,    qword [rsp + LINE.dx]  ; ai -= dx
+    shl rax,    2
+    mov qword [rsp + LINE.ai], rax
+    shl rdx,    2 ; d *   2
+    mov qword [rsp + LINE.bi], rdx ; bi =  dy*2
+    mov rax,    qword [rsp + LINE.dx]
+    sub rdx,    rax ; d -=  dx
 
 .loop_x: ; horizontal draw
     ; x = esi, y = edi
 	; push values on the stack
-	push    eax
-    push    ebx
-    push    ecx
-    push    edx
-    push    esi
+	push    rax
+    push    rbx
+    push    rcx
+    push    rdx
+    push    rsi
 	; used to determine which label to call next
-	mov esi,0
+	mov r12,0
 	
 	jmp .put_pixel	
 					
 
 .loop_x_end:
 	; pop values from the stack
-	pop    esi
-    pop    edx
-    pop    ecx
-    pop    ebx
-    pop    eax
+	pop    rsi
+    pop    rdx
+    pop    rcx
+    pop    rbx
+    pop    rax
 	
     ; x1 == x2
-    cmp esi,    dword [esp + LINE.x2]
+    cmp rsi,    qword [rsp + LINE.x2]
 	je .end
 	
     ; d < 0 ?
-    cmp  edx,    0
+    cmp  rdx,    0
     jl  .loop_x_minus
 
     ; calculate position of the next pixel
-    add esi,    ebx ; x +=  xi
-    add edi,    ecx ; y +=  yi
-    add edx,    dword [esp + LINE.ai]  ; d +=  ai
+    add rsi,    rbx ; x +=  xi
+    add rdi,    rcx ; y +=  yi
+    add rdx,    qword [rsp + LINE.ai]  ; d +=  ai
 	
 	
     ; draw line
     jmp .loop_x
 .loop_x_minus: ; vertical draw
     ; calculate position of the next pixel
-    add edx,    dword [esp + LINE.bi]  ; d +=  bi
-    add esi,    ebx ; x +=  xi
+    add rdx,    qword [rsp + LINE.bi]  ; d +=  bi
+    add rsi,    rbx ; x +=  xi
 
     ; draw line
     jmp .loop_x
 
 .osY:
     ; draw line in regard to axis Y
-    mov eax,    dword [esp + LINE.dx]  ; ai = dx
-    mov edx,    eax ; d =   dx
-    sub eax,    dword [esp + LINE.dy]  ; ai -= dy
-    shl eax,    2
-    mov dword [esp + LINE.ai], eax
-    shl edx,    2  ; d *   2
-    mov dword [esp + LINE.bi], edx ; bi =  d
-    mov eax,    dword [esp + LINE.dy]
-    sub edx,    eax ; d -=  dy
+    mov rax,    qword [rsp + LINE.dx]  ; ai = dx
+    mov rdx,    rax ; d =   dx
+    sub rax,    qword [rsp + LINE.dy]  ; ai -= dy
+    shl rax,    2
+    mov qword [rsp + LINE.ai], rax
+    shl rdx,    2  ; d *   2
+    mov qword [rsp + LINE.bi], rdx ; bi =  d
+    mov rax,    qword [rsp + LINE.dy]
+    sub rdx,    rax ; d -=  dy
 
 .loop_y:
     ; x = esi, y = edi
 	; push values on the stack
-	push    eax
-    push    ebx
-    push    ecx
-    push    edx
-    push    esi
+	push    rax
+    push    rbx
+    push    rcx
+    push    rdx
+    push    rsi
 	; used to determine which label to call next
-	mov esi,1
+	mov r12,1
 	
 	jmp .put_pixel
    		
 
 .loop_y_end:						
 	; pop values from the stack
-	pop    esi
-    pop    edx
-    pop    ecx
-    pop    ebx
-    pop    eax
+	pop    rsi
+    pop    rdx
+    pop    rcx
+    pop    rbx
+    pop    rax
 
     ; y1 == y2
-    cmp edi,    dword [esp + LINE.y2]
+    cmp rdi,    qword [rsp + LINE.y2]
     je  .end
 	
     ; d < 0
-    cmp  edx,    0
+    cmp  rdx,    0
     jl  .loop_y_minus
 
     ; calculate position of the next pixel
-    add esi,    ebx ; x +=  xi
-    add edi,    ecx ; y +=  yi
-    add edx,    dword [esp + LINE.ai]  ; d +=  ai
+    add rsi,    rbx ; x +=  xi
+    add rdi,    rcx ; y +=  yi
+    add rdx,    qword [rsp + LINE.ai]  ; d +=  ai
     ; draw line
     jmp .loop_y
 
 .loop_y_minus:
     ; calculate position of the next pixel
-    add edx,    dword [esp + LINE.bi]  ; d +=  bi
-    add edi,    ecx ; y +=  yi
+    add rdx,    qword [rsp + LINE.bi]  ; d +=  bi
+    add rdi,    rcx ; y +=  yi
 
     ; draw line
     jmp .loop_y
 
 .end:
     ; remove local variables
-    add esp,    LINE.SIZE
+    add rsp,    LINE.SIZE
+	
+	pop rbp 
+	pop rbx
+	add rsp , 8 
+	
     ret
 	
 	
 .put_pixel:	
-	mov  ebx, DWORD [esp+24 + LINE.SIZE + 20]  ;address of bitmap
-	mov eax ,[esp+20 + LINE.SIZE + 20] ; image width
+	mov  rbx, qword [r9]  ;address of bitmap
+	mov rax ,r8 ; image width
 	; calculate position
-	add eax,31 ; + 31
-	sar eax,5 ; >> 5
-	sal eax,2 ; << 2
+	add rax,31 ; + 31
+	sar rax,5 ; >> 5
+	sal rax,2 ; << 2
 	
-	mov ecx , edi ; y
-	mul ecx ; *y
-	add ebx, eax
+	mov rcx , rdi ; y
+	mul rcx ; *y
+	add rbx, rax
 	
-	mov eax , [esp] ; x
-	shr eax, 3 ; x >> 3
+	mov rax , rsi ; x
+	shr rax, 3 ; x >> 3
 	
-	add ebx, eax
+	add rbx, rax
 	; current position done
 	
-	mov  edx, DWORD [ebx]    ;load value at address
+	mov  rdx, qword [rbx]    ;load value at address
 	
 	; caulculate mask
-	mov eax,0x80
-	mov  cl, [esp] ; x
+	mov rax,0x80
+	mov  cl, sil ; x
 	and cl , 0x07
-	sar eax, cl
-	not eax
-	and  edx , eax
+	sar rax, cl
+	not rax
+	and  rdx , rax
 	
-	mov  DWORD [ebx], edx    ; writeback updated pixel value	
+	mov  qword [rbx], rdx    ; writeback updated pixel value	
 	
 	; determine which label to call next
-	mov eax, 1
-	cmp eax,esi
+	mov rax, 1
+	cmp rax,r12
 	
 	je .loop_y_end
 	

@@ -7,8 +7,8 @@
 #define CENTERX 200
 #define CENTERY 220
 struct Point{
-	int x;
-	int y;
+	long long x;
+	long long y;
 };
 typedef struct Point Point;
 /* normalize vector and multiply it by LINE_LENGTH */
@@ -17,8 +17,8 @@ void prepare_point(Point* A)
 	float w = sqrtf(A->x*A->x + A->y*A->y);
 	float x = (A->x/w)*LINE_LENGTH;
 	float y = (A->y/w)*LINE_LENGTH;
-	A->x = (int)x;
-	A->y = (int)y;
+	A->x = (long long)x;
+	A->y = (long long)y;
 }
 typedef struct
 {
@@ -41,7 +41,6 @@ typedef struct
 	unsigned long  RGBQuad_0;
 	unsigned long  RGBQuad_1;
 } __attribute__((__packed__)) bmpHdr;
-
 typedef struct
 {
 	
@@ -51,8 +50,8 @@ typedef struct
 	int col;				// current color
 } imgInfo;
 /* asm functions */
-extern struct Point rotate(Point B,int clockwise);
-extern void draw_line(Point A,Point B,int width,unsigned char* pImg);
+extern struct Point rotate(Point B,long clockwise);
+extern void draw_line(Point A,Point B,long width,unsigned char* pImg);
 void* freeResources(FILE* pFile, void* pFirst, void* pSnd)
 {
 	if (pFile != 0)
@@ -269,7 +268,7 @@ int main(void)
 {
 	imgInfo* ImgData;
 	printf("Size of bmpHeader = %d\n", sizeof(bmpHdr));
-	if (sizeof(bmpHdr) != 62)
+	if (sizeof(bmpHdr) != 114)
 	{
 		printf("Size of structure bmpHdr must be 62.\n");
 		return 1;
@@ -297,11 +296,13 @@ int main(void)
 		{
 			end = rotate(end,1);
 			prepare_point(&end);
+			printf("END point X: %lli , Y: %lli \n",end.x,end.y);
 		}
 		else if (input[i] == '-')
 		{
 			end = rotate(end,-1);
 			prepare_point(&end);
+			printf("END point X: %lli , Y: %lli \n",end.x,end.y);
 		}
 		else if (input[i] == 'F')
 		{
